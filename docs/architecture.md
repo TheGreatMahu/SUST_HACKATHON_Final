@@ -2,6 +2,8 @@
 
 ## Component Diagram
 
+The system is now backed by a lightweight SQLite persistence layer so the demo remains stateful across restarts. The database is initialized on startup and stores simulation metadata, workflow cases, and related operational state.
+
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         FRONTEND LAYER                               │
@@ -63,6 +65,10 @@
 │  ╚═════════════════════════════════════════════════════════════════╝ │
 │                                                                       │
 │  ┌─────────────────────────────────────────────────────────────────┐ │
+│  │           PERSISTENCE LAYER (SQLite / Local Demo DB)          │ │
+│  │  Stores cases, audits, metadata, and operational state        │ │
+│  └─────────────────────────────────────────────────────────────────┘ │
+│  ┌─────────────────────────────────────────────────────────────────┐ │
 │  │              SYNTHETIC DATA GENERATOR (Seg 1)                   │ │
 │  │  Poisson arrivals × TOD multiplier × 1.8× pre-Eid surge        │ │
 │  │  GT Event 1: Structuring burst (bKash, 17:10–17:28)            │ │
@@ -94,12 +100,12 @@ SyntheticDataGenerator
 
 ## Provider Boundary Contract
 
-| What is allowed | What is NOT allowed |
-|-----------------|---------------------|
-| bKash pipeline reads bKash transactions | bKash pipeline reading Nagad balances |
-| ProviderRegistry combining for display | Any pipeline modifying another's data |
-| Analytics engine querying Registry | Direct inter-pipeline communication |
-| Alert shows "bKash balance low" | Alert implying Nagad can fill bKash shortage |
+| What is allowed                          | What is NOT allowed                            |
+| ---------------------------------------- | ---------------------------------------------- |
+| bKash pipeline reads bKash transactions  | bKash pipeline reading Nagad balances          |
+| ProviderRegistry combining for display   | Any pipeline modifying another's data          |
+| Analytics engine querying Registry       | Direct inter-pipeline communication            |
+| Alert shows "bKash balance low"          | Alert implying Nagad can fill bKash shortage   |
 | Confidence degrades when Rocket is stale | Silent confident output with stale Rocket data |
 
 ## Alert Lifecycle
@@ -161,12 +167,14 @@ frontend/index.html — Single-File SPA (1,406 lines)
 ```
 
 ### Why single-file SPA?
+
 - **Zero build tooling** — open in browser, no `npm install` or bundler
 - **Demo reliability** — no transpilation bugs, no hydration failures
 - **Judge accessibility** — one file to review, easy to verify no banned words
 - **Portable** — works on any machine with a browser and the backend running
 
 ### API Communication
+
 All data flows through REST `fetch()` calls to the FastAPI backend. No WebSocket is used (unnecessary for the demo's polling model). The frontend never stores state locally — every view re-fetches from the backend, ensuring both sides of the dashboard always reflect the same truth.
 
 ## Validation Layer (Segment 6)
@@ -186,41 +194,41 @@ The validation module reads ground truth from `backend/data/ground_truth.json` a
 
 ## Complete Endpoint Inventory (33 endpoints)
 
-| Seg | Method | Endpoint | Purpose |
-|-----|--------|----------|---------|
-| 1 | GET | `/health` | Health check |
-| 1 | GET | `/api/v1/system/health` | Provider feed health |
-| 1 | GET | `/api/v1/data/summary` | Simulation summary |
-| 1 | GET | `/api/v1/agents` | List all agents |
-| 1 | GET | `/api/v1/agents/{id}` | Single agent view |
-| 1 | GET | `/api/v1/transactions` | Query transactions |
-| 1 | GET | `/api/v1/providers/{id}/balances` | Provider-specific balances |
-| 2 | GET | `/api/v1/analytics/liquidity` | Liquidity projections |
-| 2 | GET | `/api/v1/analytics/liquidity/{id}` | Agent liquidity |
-| 2 | GET | `/api/v1/analytics/anomalies` | All anomalies |
-| 2 | GET | `/api/v1/analytics/anomalies/{id}` | Agent anomalies |
-| 2 | GET | `/api/v1/analytics/alerts` | Combined alerts |
-| 2 | POST | `/api/v1/system/chaos/degrade/{id}` | Chaos: degrade feed |
-| 2 | POST | `/api/v1/system/chaos/restore/{id}` | Chaos: restore feed |
-| 2 | GET | `/api/v1/system/chaos/status` | Chaos toggle state |
-| 3 | GET | `/api/v1/narration/alert/{idx}` | Bilingual narration |
-| 3 | GET | `/api/v1/narration/alert/{idx}/stakeholder/{role}` | Stakeholder framing |
-| 3 | GET | `/api/v1/narration/mode` | Narration mode |
-| 4 | GET | `/api/v1/cases` | List cases |
-| 4 | GET | `/api/v1/cases/summary` | Case board summary |
-| 4 | GET | `/api/v1/cases/{id}` | Single case + audit |
-| 4 | POST | `/api/v1/cases/create-from-alerts` | Create cases |
-| 4 | POST | `/api/v1/cases/{id}/assign` | Assign case |
-| 4 | POST | `/api/v1/cases/{id}/acknowledge` | Acknowledge case |
-| 4 | POST | `/api/v1/cases/{id}/escalate` | Escalate case |
-| 4 | POST | `/api/v1/cases/{id}/resolve` | Resolve case |
-| 4 | POST | `/api/v1/cases/{id}/note` | Add case note |
-| 4 | GET | `/api/v1/cases/{id}/audit` | Audit trail |
-| 6 | GET | `/api/v1/metrics/validation` | Full validation report |
-| 6 | GET | `/api/v1/metrics/anomaly` | Anomaly P/R/F1 |
-| 6 | GET | `/api/v1/metrics/latency` | API latency P50/P95 |
-| 6 | GET | `/api/v1/metrics/narration-safety` | Narration safety |
-| 6 | GET | `/api/v1/metrics/ground-truth` | GT summary |
+| Seg | Method | Endpoint                                           | Purpose                    |
+| --- | ------ | -------------------------------------------------- | -------------------------- |
+| 1   | GET    | `/health`                                          | Health check               |
+| 1   | GET    | `/api/v1/system/health`                            | Provider feed health       |
+| 1   | GET    | `/api/v1/data/summary`                             | Simulation summary         |
+| 1   | GET    | `/api/v1/agents`                                   | List all agents            |
+| 1   | GET    | `/api/v1/agents/{id}`                              | Single agent view          |
+| 1   | GET    | `/api/v1/transactions`                             | Query transactions         |
+| 1   | GET    | `/api/v1/providers/{id}/balances`                  | Provider-specific balances |
+| 2   | GET    | `/api/v1/analytics/liquidity`                      | Liquidity projections      |
+| 2   | GET    | `/api/v1/analytics/liquidity/{id}`                 | Agent liquidity            |
+| 2   | GET    | `/api/v1/analytics/anomalies`                      | All anomalies              |
+| 2   | GET    | `/api/v1/analytics/anomalies/{id}`                 | Agent anomalies            |
+| 2   | GET    | `/api/v1/analytics/alerts`                         | Combined alerts            |
+| 2   | POST   | `/api/v1/system/chaos/degrade/{id}`                | Chaos: degrade feed        |
+| 2   | POST   | `/api/v1/system/chaos/restore/{id}`                | Chaos: restore feed        |
+| 2   | GET    | `/api/v1/system/chaos/status`                      | Chaos toggle state         |
+| 3   | GET    | `/api/v1/narration/alert/{idx}`                    | Bilingual narration        |
+| 3   | GET    | `/api/v1/narration/alert/{idx}/stakeholder/{role}` | Stakeholder framing        |
+| 3   | GET    | `/api/v1/narration/mode`                           | Narration mode             |
+| 4   | GET    | `/api/v1/cases`                                    | List cases                 |
+| 4   | GET    | `/api/v1/cases/summary`                            | Case board summary         |
+| 4   | GET    | `/api/v1/cases/{id}`                               | Single case + audit        |
+| 4   | POST   | `/api/v1/cases/create-from-alerts`                 | Create cases               |
+| 4   | POST   | `/api/v1/cases/{id}/assign`                        | Assign case                |
+| 4   | POST   | `/api/v1/cases/{id}/acknowledge`                   | Acknowledge case           |
+| 4   | POST   | `/api/v1/cases/{id}/escalate`                      | Escalate case              |
+| 4   | POST   | `/api/v1/cases/{id}/resolve`                       | Resolve case               |
+| 4   | POST   | `/api/v1/cases/{id}/note`                          | Add case note              |
+| 4   | GET    | `/api/v1/cases/{id}/audit`                         | Audit trail                |
+| 6   | GET    | `/api/v1/metrics/validation`                       | Full validation report     |
+| 6   | GET    | `/api/v1/metrics/anomaly`                          | Anomaly P/R/F1             |
+| 6   | GET    | `/api/v1/metrics/latency`                          | API latency P50/P95        |
+| 6   | GET    | `/api/v1/metrics/narration-safety`                 | Narration safety           |
+| 6   | GET    | `/api/v1/metrics/ground-truth`                     | GT summary                 |
 
 ## Project File Structure
 

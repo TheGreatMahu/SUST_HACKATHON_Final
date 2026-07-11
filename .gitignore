@@ -1,6 +1,9 @@
 .env
 backend/data/generated_data.json
 backend/data/ground_truth.json
+backend/data/liquidityiq.db
+backend/data/liquidityiq.db-shm
+backend/data/liquidityiq.db-wal
 __pycache__/
 *.pyc
 *.pyo
