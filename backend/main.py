@@ -1,6 +1,9 @@
 """
 FastAPI Application — Multi-Provider Liquidity & Anomaly System
-Segment 1 bootstrap: data generation + provider isolation endpoints
+Segment 1: data generation + provider isolation endpoints
+Segment 2: analytics engine — liquidity projection, anomaly detection, chaos toggle
+Segment 3: LLM narration layer — bilingual alerts, stakeholder-specific framing
+Segment 4: case & coordination workflow — lifecycle, audit trail, escalation
 """
 
 from fastapi import FastAPI, Query
@@ -11,9 +14,20 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
-from backend.data.generator import SyntheticDataGenerator
+from backend.data.generator import SyntheticDataGenerator, SIM_END
 from backend.models.data_models import Provider, ProviderFeed, AgentProfile
 from backend.providers.registry import ProviderRegistry, ProviderPipeline
+
+# Segment 2 imports
+from backend.analytics.liquidity import LiquidityProjector
+from backend.analytics.anomaly import AnomalyDetector
+from backend.analytics.fallback import ChaosState, AlertBuilder
+
+# Segment 3 imports
+from backend.narration import NarrationEngine
+
+# Segment 4 imports
+from backend.workflow import CaseManager, CaseStatus, StakeholderRole
 
 # ---------------------------------------------------------------------------
 # App setup
@@ -21,7 +35,7 @@ from backend.providers.registry import ProviderRegistry, ProviderPipeline
 app = FastAPI(
     title="SuperAgent LiquidityIQ API",
     description="Multi-provider MFS agent liquidity and anomaly decision-support system",
-    version="1.0.0",
+    version="2.0.0",
 )
 
 app.add_middleware(
@@ -38,6 +52,19 @@ _registry: Optional[ProviderRegistry] = None
 _raw_data: Optional[dict] = None
 _ground_truth: Optional[list] = None
 
+# Segment 2 — analytics state
+_liquidity_projector: Optional[LiquidityProjector] = None
+_anomaly_detector: Optional[AnomalyDetector] = None
+_chaos_state: ChaosState = ChaosState()
+_alert_builder: Optional[AlertBuilder] = None
+_sim_end_time: Optional[datetime] = None
+
+# Segment 3 — narration state
+_narration_engine: Optional[NarrationEngine] = None
+
+# Segment 4 — case workflow state
+_case_manager: CaseManager = CaseManager()
+
 DATA_CACHE = Path("backend/data/generated_data.json")
 GT_CACHE   = Path("backend/data/ground_truth.json")
 
@@ -45,6 +72,8 @@ GT_CACHE   = Path("backend/data/ground_truth.json")
 @app.on_event("startup")
 async def startup():
     global _registry, _raw_data, _ground_truth
+    global _liquidity_projector, _anomaly_detector, _alert_builder, _sim_end_time
+    global _narration_engine
 
     print("[Startup] Generating synthetic data...")
     gen = SyntheticDataGenerator()
@@ -71,12 +100,23 @@ async def startup():
     pipelines = {prov: ProviderPipeline(prov, feed) for prov, feed in feeds.items()}
     _registry = ProviderRegistry(pipelines, agents)
 
+    # Segment 2 — initialize analytics engine
+    _liquidity_projector = LiquidityProjector(_registry)
+    _anomaly_detector = AnomalyDetector(_registry)
+    _alert_builder = AlertBuilder(_chaos_state)
+    _sim_end_time = SIM_END
+
+    # Segment 3 — initialize narration engine
+    _narration_engine = NarrationEngine()
+
     print("[Startup] Registry ready.")
+    print("[Startup] Analytics engine initialized.")
+    print(f"[Startup] Narration mode: {_narration_engine.mode}")
     print(f"[Startup] Summary: {result['summary']}")
 
 
 # ---------------------------------------------------------------------------
-# Routes — Segment 1
+# Routes — Segment 1: Data & Provider Isolation
 # ---------------------------------------------------------------------------
 
 @app.get("/health")
@@ -89,7 +129,10 @@ def system_health():
     """Provider feed health — shows if any provider data is delayed or missing."""
     if not _registry:
         return JSONResponse({"error": "system not ready"}, status_code=503)
-    return _registry.health_summary()
+    health_data = _registry.health_summary()
+    # Include chaos state
+    health_data["chaos_state"] = _chaos_state.get_status()
+    return health_data
 
 
 @app.get("/api/v1/data/summary")
@@ -168,3 +211,406 @@ def get_provider_balances(provider_id: str):
 
 # NOTE: Ground truth is intentionally NOT exposed via API.
 # It is only read by the validation/metrics module in Segment 6.
+
+
+# ---------------------------------------------------------------------------
+# Routes — Segment 2: Analytics Engine
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/analytics/liquidity")
+def get_all_liquidity():
+    """Liquidity projections for all agents — time-to-depletion with confidence."""
+    if not _liquidity_projector:
+        return JSONResponse({"error": "analytics not ready"}, status_code=503)
+
+    projections = _liquidity_projector.project_all_agents(
+        reference_time=_sim_end_time,
+        feed_health=_chaos_state.get_health_overrides(),
+    )
+    return {
+        "count": len(projections),
+        "projections": [p.model_dump(mode="json") for p in projections],
+    }
+
+
+@app.get("/api/v1/analytics/liquidity/{agent_id}")
+def get_agent_liquidity(agent_id: str):
+    """Liquidity projection for a single agent — shared cash + per-provider."""
+    if not _liquidity_projector or not _registry:
+        return JSONResponse({"error": "analytics not ready"}, status_code=503)
+
+    agent = _registry.get_agent(agent_id)
+    if not agent:
+        return JSONResponse({"error": "agent not found"}, status_code=404)
+
+    projections = _liquidity_projector.project_agent(
+        agent,
+        reference_time=_sim_end_time,
+        feed_health=_chaos_state.get_health_overrides(),
+    )
+    return {
+        "agent_id": agent_id,
+        "projections": [p.model_dump(mode="json") for p in projections],
+    }
+
+
+@app.get("/api/v1/analytics/anomalies")
+def get_all_anomalies():
+    """All detected anomalies across all agents and providers."""
+    if not _anomaly_detector:
+        return JSONResponse({"error": "analytics not ready"}, status_code=503)
+
+    anomalies = _anomaly_detector.detect_all(
+        reference_time=_sim_end_time,
+        feed_health=_chaos_state.get_health_overrides(),
+    )
+    return {
+        "count": len(anomalies),
+        "anomalies": [a.model_dump(mode="json") for a in anomalies],
+    }
+
+
+@app.get("/api/v1/analytics/anomalies/{agent_id}")
+def get_agent_anomalies(agent_id: str):
+    """Anomalies detected for a single agent."""
+    if not _anomaly_detector:
+        return JSONResponse({"error": "analytics not ready"}, status_code=503)
+
+    anomalies = _anomaly_detector.detect_for_agent(
+        agent_id,
+        reference_time=_sim_end_time,
+    )
+    return {
+        "agent_id": agent_id,
+        "count": len(anomalies),
+        "anomalies": [a.model_dump(mode="json") for a in anomalies],
+    }
+
+
+@app.get("/api/v1/analytics/alerts")
+def get_all_alerts():
+    """
+    Combined alerts — liquidity shortages + anomaly detections.
+    Sorted by severity (critical first). Every alert carries:
+      - Confidence level
+      - Classification (likely_normal / data_quality_issue / requires_review)
+      - Evidence (the literal numbers that triggered it)
+      - Recommended action
+      - Human-review disclaimer
+    """
+    if not _liquidity_projector or not _anomaly_detector or not _alert_builder:
+        return JSONResponse({"error": "analytics not ready"}, status_code=503)
+
+    feed_health = _chaos_state.get_health_overrides()
+
+    # Get shortage-level liquidity alerts only
+    liquidity = _liquidity_projector.get_shortage_alerts(
+        reference_time=_sim_end_time,
+        feed_health=feed_health,
+    )
+
+    anomalies = _anomaly_detector.detect_all(
+        reference_time=_sim_end_time,
+        feed_health=feed_health,
+    )
+
+    alerts = _alert_builder.build_all_alerts(liquidity, anomalies)
+
+    return {
+        "count": len(alerts),
+        "alerts": [a.model_dump(mode="json") for a in alerts],
+        "chaos_active": not _chaos_state.get_status()["all_healthy"],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Routes — Segment 2: Chaos Toggle (Scenario C demo)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/system/chaos/degrade/{provider_id}")
+def chaos_degrade(provider_id: str, delay_seconds: int = Query(900)):
+    """
+    Chaos toggle: simulate a provider feed going down.
+    Immediately degrades confidence on all alerts for this provider.
+    Use this for Scenario C demo — flip the switch and watch confidence drop.
+    """
+    try:
+        prov = Provider(provider_id)
+    except ValueError:
+        return JSONResponse({"error": f"unknown provider: {provider_id}"}, status_code=400)
+
+    result = _chaos_state.degrade_provider(prov.value, delay_seconds)
+    return result
+
+
+@app.post("/api/v1/system/chaos/restore/{provider_id}")
+def chaos_restore(provider_id: str):
+    """Restore a previously degraded provider feed."""
+    try:
+        prov = Provider(provider_id)
+    except ValueError:
+        return JSONResponse({"error": f"unknown provider: {provider_id}"}, status_code=400)
+
+    result = _chaos_state.restore_provider(prov.value)
+    return result
+
+
+@app.get("/api/v1/system/chaos/status")
+def chaos_status():
+    """Current chaos toggle state — which providers are degraded."""
+    return _chaos_state.get_status()
+
+
+# ---------------------------------------------------------------------------
+# Routes — Segment 3: LLM Narration Layer
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/narration/alert/{alert_index}")
+def narrate_alert(alert_index: int = 0):
+    """
+    Generate bilingual narration (Bangla/Banglish/English) for an alert.
+    Uses LLM when API key is available, template fallback otherwise.
+    """
+    if not _narration_engine or not _alert_builder:
+        return JSONResponse({"error": "narration not ready"}, status_code=503)
+
+    feed_health = _chaos_state.get_health_overrides()
+    liquidity = _liquidity_projector.get_shortage_alerts(
+        reference_time=_sim_end_time, feed_health=feed_health,
+    )
+    anomalies = _anomaly_detector.detect_all(
+        reference_time=_sim_end_time, feed_health=feed_health,
+    )
+    alerts = _alert_builder.build_all_alerts(liquidity, anomalies)
+
+    if alert_index >= len(alerts):
+        return JSONResponse({"error": f"alert index {alert_index} out of range (total: {len(alerts)})"}, status_code=404)
+
+    alert = alerts[alert_index]
+    narration = _narration_engine.narrate(alert)
+
+    return {
+        "alert_id": alert.alert_id,
+        "alert_type": alert.alert_type.value,
+        "provider": alert.provider,
+        "agent_id": alert.agent_id,
+        "narration": narration,
+    }
+
+
+@app.get("/api/v1/narration/alert/{alert_index}/stakeholder/{role}")
+def narrate_for_stakeholder(alert_index: int = 0, role: str = "agent"):
+    """
+    Generate stakeholder-specific narration:
+      - agent: Bangla/Banglish, supportive tone, focus on cash availability
+      - field_officer: mixed language, coordination focus
+      - compliance_analyst: English, statistical evidence, escalation checklist
+    """
+    if not _narration_engine or not _alert_builder:
+        return JSONResponse({"error": "narration not ready"}, status_code=503)
+
+    feed_health = _chaos_state.get_health_overrides()
+    liquidity = _liquidity_projector.get_shortage_alerts(
+        reference_time=_sim_end_time, feed_health=feed_health,
+    )
+    anomalies = _anomaly_detector.detect_all(
+        reference_time=_sim_end_time, feed_health=feed_health,
+    )
+    alerts = _alert_builder.build_all_alerts(liquidity, anomalies)
+
+    if alert_index >= len(alerts):
+        return JSONResponse({"error": f"alert index {alert_index} out of range"}, status_code=404)
+
+    valid_roles = ["agent", "field_officer", "compliance_analyst"]
+    if role not in valid_roles:
+        return JSONResponse({"error": f"role must be one of {valid_roles}"}, status_code=400)
+
+    alert = alerts[alert_index]
+    framing = _narration_engine.narrate_for_stakeholder(alert, role)
+
+    return {
+        "alert_id": alert.alert_id,
+        "role": role,
+        "framing": framing,
+    }
+
+
+@app.get("/api/v1/narration/mode")
+def narration_mode():
+    """Check current narration mode — 'llm' or 'template'."""
+    return {
+        "mode": _narration_engine.mode if _narration_engine else "not_initialized",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Routes — Segment 4: Case & Coordination Workflow
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/cases")
+def list_cases(
+    status: Optional[str] = Query(None, description="Filter by status"),
+    provider: Optional[str] = Query(None, description="Filter by provider"),
+    agent_id: Optional[str] = Query(None, description="Filter by agent"),
+):
+    """List all cases with optional filters."""
+    cases = _case_manager.all_cases
+    if status:
+        cases = [c for c in cases if c.status.value == status]
+    if provider:
+        cases = [c for c in cases if c.provider == provider]
+    if agent_id:
+        cases = [c for c in cases if c.agent_id == agent_id]
+
+    return {
+        "count": len(cases),
+        "cases": [c.model_dump(mode="json") for c in cases],
+    }
+
+
+@app.get("/api/v1/cases/summary")
+def cases_summary():
+    """Case board overview — counts by status, open critical cases."""
+    return _case_manager.get_summary()
+
+
+@app.get("/api/v1/cases/{case_id}")
+def get_case(case_id: str):
+    """Get a single case with full audit trail."""
+    case = _case_manager.get_case(case_id)
+    if not case:
+        return JSONResponse({"error": f"case {case_id} not found"}, status_code=404)
+    return case.model_dump(mode="json")
+
+
+@app.post("/api/v1/cases/create-from-alerts")
+def create_cases_from_alerts():
+    """
+    Create cases from all current alerts.
+    Each alert gets narrated (Segment 3) and wrapped in a trackable case (Segment 4).
+    """
+    if not _alert_builder or not _narration_engine:
+        return JSONResponse({"error": "system not ready"}, status_code=503)
+
+    feed_health = _chaos_state.get_health_overrides()
+    liquidity = _liquidity_projector.get_shortage_alerts(
+        reference_time=_sim_end_time, feed_health=feed_health,
+    )
+    anomalies = _anomaly_detector.detect_all(
+        reference_time=_sim_end_time, feed_health=feed_health,
+    )
+    alerts = _alert_builder.build_all_alerts(liquidity, anomalies)
+
+    # Narrate each alert
+    narrations = _narration_engine.narrate_batch(alerts)
+
+    # Create cases
+    alert_dicts = [a.model_dump(mode="json") for a in alerts]
+    cases = _case_manager.create_cases_from_alerts(alert_dicts, narrations)
+
+    return {
+        "created": len(cases),
+        "cases": [c.model_dump(mode="json") for c in cases],
+    }
+
+
+@app.post("/api/v1/cases/{case_id}/assign")
+def assign_case(
+    case_id: str,
+    role: str = Query("field_officer", description="Stakeholder role to assign"),
+):
+    """Assign a case to a stakeholder role."""
+    try:
+        owner_role = StakeholderRole(role)
+    except ValueError:
+        valid = [r.value for r in StakeholderRole]
+        return JSONResponse({"error": f"role must be one of {valid}"}, status_code=400)
+
+    case = _case_manager.assign_case(case_id, owner_role)
+    if not case:
+        return JSONResponse({"error": f"case {case_id} not found"}, status_code=404)
+    return case.model_dump(mode="json")
+
+
+@app.post("/api/v1/cases/{case_id}/acknowledge")
+def acknowledge_case(case_id: str):
+    """Mark a case as acknowledged by its current owner."""
+    case = _case_manager.get_case(case_id)
+    if not case:
+        return JSONResponse({"error": f"case {case_id} not found"}, status_code=404)
+
+    owner_id = case.current_owner_id or "SYSTEM"
+    owner_role = case.current_owner_role or StakeholderRole.FIELD_OFFICER
+
+    updated = _case_manager.acknowledge_case(case_id, owner_id, owner_role)
+    return updated.model_dump(mode="json")
+
+
+@app.post("/api/v1/cases/{case_id}/escalate")
+def escalate_case(
+    case_id: str,
+    reason: str = Query("", description="Reason for escalation"),
+):
+    """Escalate a case to the next level in the hierarchy."""
+    case = _case_manager.get_case(case_id)
+    if not case:
+        return JSONResponse({"error": f"case {case_id} not found"}, status_code=404)
+
+    actor_id = case.current_owner_id or "SYSTEM"
+    actor_role = case.current_owner_role or StakeholderRole.FIELD_OFFICER
+
+    updated = _case_manager.escalate_case(case_id, actor_id, actor_role, reason)
+    return updated.model_dump(mode="json")
+
+
+@app.post("/api/v1/cases/{case_id}/resolve")
+def resolve_case(
+    case_id: str,
+    note: str = Query("", description="Resolution note"),
+):
+    """Resolve a case with a closure note."""
+    case = _case_manager.get_case(case_id)
+    if not case:
+        return JSONResponse({"error": f"case {case_id} not found"}, status_code=404)
+
+    actor_id = case.current_owner_id or "SYSTEM"
+    actor_role = case.current_owner_role or StakeholderRole.FIELD_OFFICER
+
+    updated = _case_manager.resolve_case(case_id, actor_id, actor_role, note)
+    return updated.model_dump(mode="json")
+
+
+@app.post("/api/v1/cases/{case_id}/note")
+def add_case_note(
+    case_id: str,
+    note: str = Query(..., description="Note text"),
+    role: str = Query("field_officer", description="Actor role"),
+):
+    """Add a note to a case without changing its status."""
+    case = _case_manager.get_case(case_id)
+    if not case:
+        return JSONResponse({"error": f"case {case_id} not found"}, status_code=404)
+
+    try:
+        actor_role = StakeholderRole(role)
+    except ValueError:
+        actor_role = StakeholderRole.FIELD_OFFICER
+
+    actor_id = case.current_owner_id or "SYSTEM"
+    updated = _case_manager.add_note(case_id, actor_id, actor_role, note)
+    return updated.model_dump(mode="json")
+
+
+@app.get("/api/v1/cases/{case_id}/audit")
+def get_case_audit(case_id: str):
+    """Get the full audit trail for a case."""
+    case = _case_manager.get_case(case_id)
+    if not case:
+        return JSONResponse({"error": f"case {case_id} not found"}, status_code=404)
+
+    return {
+        "case_id": case_id,
+        "status": case.status.value,
+        "audit_trail": [e.model_dump(mode="json") for e in case.audit_trail],
+        "notification_log": case.notification_log,
+    }

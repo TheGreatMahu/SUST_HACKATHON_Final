@@ -46,9 +46,9 @@ Multi-Provider Liquidity & Anomaly Decision-Support System
 ## 📋 Submission Checklist
 
 - [x] **Segment 1** — Synthetic Data & Provider Isolation ✅
-- [ ] **Segment 2** — Core Analytics Engine (Liquidity + Anomaly)
-- [ ] **Segment 3** — LLM Narration Layer (Bilingual)
-- [ ] **Segment 4** — Case & Coordination Workflow
+- [x] **Segment 2** — Core Analytics Engine (Liquidity + Anomaly) ✅
+- [x] **Segment 3** — LLM Narration Layer (Bilingual) ✅
+- [x] **Segment 4** — Case & Coordination Workflow ✅
 - [ ] **Segment 5** — Two-Sided Dashboard
 - [ ] **Segment 6** — Validation, Metrics, Demo
 
