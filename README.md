@@ -49,7 +49,7 @@ Multi-Provider Liquidity & Anomaly Decision-Support System
 - [x] **Segment 2** — Core Analytics Engine (Liquidity + Anomaly) ✅
 - [x] **Segment 3** — LLM Narration Layer (Bilingual) ✅
 - [x] **Segment 4** — Case & Coordination Workflow ✅
-- [ ] **Segment 5** — Two-Sided Dashboard
+- [x] **Segment 5** — Two-Sided Dashboard ✅
 - [ ] **Segment 6** — Validation, Metrics, Demo
 
 ## 🚀 Setup & Run

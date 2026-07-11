@@ -1,0 +1,1405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SuperAgent LiquidityIQ — bKash SUST CSE Carnival 2026</title>
+  <meta name="description" content="Multi-provider MFS agent liquidity and unusual activity decision-support dashboard. Helps super agents and field officers coordinate safe responses." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+Bengali:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ============================================================
+       DESIGN SYSTEM
+       ============================================================ */
+    :root {
+      --clr-bg:        #0a0d14;
+      --clr-surface:   #111520;
+      --clr-surface2:  #181e2e;
+      --clr-border:    rgba(255,255,255,0.07);
+      --clr-text:      #e8eaf0;
+      --clr-muted:     #6b7592;
+      --clr-accent:    #e9149e;   /* bKash pink */
+      --clr-accent2:   #7c3aed;  /* violet */
+      --clr-green:     #22c55e;
+      --clr-yellow:    #f59e0b;
+      --clr-red:       #ef4444;
+      --clr-blue:      #3b82f6;
+      --clr-info:      #06b6d4;
+
+      --radius:        12px;
+      --radius-sm:     8px;
+      --shadow:        0 4px 24px rgba(0,0,0,0.4);
+      --transition:    0.2s ease;
+
+      /* Confidence colours */
+      --conf-high:   #22c55e;
+      --conf-medium: #f59e0b;
+      --conf-low:    #ef4444;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--clr-bg);
+      color: var(--clr-text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ============================================================
+       LAYOUT
+       ============================================================ */
+    .app-shell {
+      display: grid;
+      grid-template-rows: 60px 1fr;
+      grid-template-columns: 220px 1fr;
+      min-height: 100vh;
+    }
+
+    /* Top bar */
+    .topbar {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 0 24px;
+      background: var(--clr-surface);
+      border-bottom: 1px solid var(--clr-border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .topbar-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 1.05rem;
+      color: #fff;
+    }
+
+    .brand-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--clr-accent);
+      box-shadow: 0 0 8px var(--clr-accent);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.3); opacity: 0.7; }
+    }
+
+    .topbar-spacer { flex: 1; }
+
+    .topbar-meta {
+      font-size: 0.78rem;
+      color: var(--clr-muted);
+    }
+
+    .role-switcher {
+      display: flex;
+      gap: 4px;
+      background: var(--clr-bg);
+      border: 1px solid var(--clr-border);
+      border-radius: var(--radius-sm);
+      padding: 3px;
+    }
+
+    .role-btn {
+      padding: 4px 12px;
+      border: none;
+      background: transparent;
+      color: var(--clr-muted);
+      border-radius: 6px;
+      font-size: 0.78rem;
+      cursor: pointer;
+      transition: var(--transition);
+      font-family: inherit;
+    }
+
+    .role-btn.active {
+      background: var(--clr-accent);
+      color: #fff;
+    }
+
+    .chaos-btn {
+      padding: 5px 14px;
+      border: 1px solid var(--clr-red);
+      background: rgba(239,68,68,0.1);
+      color: var(--clr-red);
+      border-radius: var(--radius-sm);
+      font-size: 0.78rem;
+      font-family: inherit;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .chaos-btn:hover { background: rgba(239,68,68,0.2); }
+    .chaos-btn.active { background: var(--clr-red); color: #fff; }
+
+    /* Sidebar */
+    .sidebar {
+      background: var(--clr-surface);
+      border-right: 1px solid var(--clr-border);
+      padding: 20px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      overflow-y: auto;
+    }
+
+    .nav-section-label {
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: var(--clr-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 12px 8px 4px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: var(--transition);
+      font-size: 0.85rem;
+      color: var(--clr-muted);
+      user-select: none;
+    }
+
+    .nav-item:hover { background: var(--clr-surface2); color: var(--clr-text); }
+    .nav-item.active { background: rgba(233,20,158,0.12); color: var(--clr-accent); font-weight: 500; }
+
+    .nav-icon { font-size: 1rem; width: 20px; text-align: center; }
+    .nav-badge {
+      margin-left: auto;
+      background: var(--clr-red);
+      color: #fff;
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 99px;
+      min-width: 20px;
+      text-align: center;
+    }
+
+    /* Main content */
+    .main-content {
+      padding: 24px;
+      overflow-y: auto;
+      max-height: calc(100vh - 60px);
+    }
+
+    /* ============================================================
+       PANELS / VIEWS
+       ============================================================ */
+    .view { display: none; }
+    .view.active { display: block; }
+
+    /* ============================================================
+       STAT CARDS
+       ============================================================ */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--clr-surface);
+      border: 1px solid var(--clr-border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+      position: relative;
+      overflow: hidden;
+      transition: var(--transition);
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: var(--accent, var(--clr-accent));
+    }
+
+    .stat-card:hover { border-color: rgba(255,255,255,0.14); transform: translateY(-2px); }
+
+    .stat-label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--clr-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .stat-value {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #fff;
+      margin: 6px 0 2px;
+      line-height: 1;
+    }
+
+    .stat-sub {
+      font-size: 0.75rem;
+      color: var(--clr-muted);
+    }
+
+    /* ============================================================
+       ALERT CARDS
+       ============================================================ */
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .section-count {
+      background: var(--clr-surface2);
+      border: 1px solid var(--clr-border);
+      color: var(--clr-muted);
+      font-size: 0.72rem;
+      padding: 2px 8px;
+      border-radius: 99px;
+    }
+
+    .alert-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    .alert-card {
+      background: var(--clr-surface);
+      border: 1px solid var(--clr-border);
+      border-left: 4px solid transparent;
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      cursor: pointer;
+      transition: var(--transition);
+      position: relative;
+    }
+
+    .alert-card:hover { border-color: rgba(255,255,255,0.12); transform: translateX(2px); }
+
+    .alert-card.critical { border-left-color: var(--clr-red); }
+    .alert-card.warning  { border-left-color: var(--clr-yellow); }
+    .alert-card.info     { border-left-color: var(--clr-blue); }
+
+    .alert-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .alert-icon { font-size: 1.2rem; flex-shrink: 0; margin-top: 1px; }
+
+    .alert-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #fff;
+      flex: 1;
+      line-height: 1.4;
+    }
+
+    .alert-badges {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .badge {
+      font-size: 0.68rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 99px;
+      border: 1px solid transparent;
+    }
+
+    .badge-severity-critical { background: rgba(239,68,68,0.15); color: var(--clr-red); border-color: rgba(239,68,68,0.3); }
+    .badge-severity-warning  { background: rgba(245,158,11,0.15); color: var(--clr-yellow); border-color: rgba(245,158,11,0.3); }
+    .badge-severity-info     { background: rgba(59,130,246,0.15); color: var(--clr-blue); border-color: rgba(59,130,246,0.3); }
+
+    .badge-conf-high   { background: rgba(34,197,94,0.12); color: var(--conf-high); border-color: rgba(34,197,94,0.25); }
+    .badge-conf-medium { background: rgba(245,158,11,0.12); color: var(--conf-medium); border-color: rgba(245,158,11,0.25); }
+    .badge-conf-low    { background: rgba(239,68,68,0.12); color: var(--conf-low); border-color: rgba(239,68,68,0.25); }
+
+    .badge-class-likely_normal    { background: rgba(34,197,94,0.10); color: var(--clr-green); border-color: rgba(34,197,94,0.2); }
+    .badge-class-requires_review  { background: rgba(233,20,158,0.10); color: var(--clr-accent); border-color: rgba(233,20,158,0.2); }
+    .badge-class-data_quality_issue { background: rgba(6,182,212,0.10); color: var(--clr-info); border-color: rgba(6,182,212,0.2); }
+
+    .badge-provider {
+      background: rgba(124,58,237,0.12);
+      color: #a78bfa;
+      border-color: rgba(124,58,237,0.25);
+    }
+
+    .alert-summary {
+      font-size: 0.82rem;
+      color: var(--clr-muted);
+      line-height: 1.5;
+      margin-bottom: 10px;
+    }
+
+    .alert-bilingual {
+      background: var(--clr-bg);
+      border: 1px solid var(--clr-border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      font-size: 0.8rem;
+      margin-bottom: 10px;
+      display: none;
+    }
+
+    .alert-bilingual.visible { display: block; }
+
+    .bilingual-tab-row {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+
+    .bilingual-tab {
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      color: var(--clr-muted);
+      background: transparent;
+      border: 1px solid var(--clr-border);
+      font-family: inherit;
+      transition: var(--transition);
+    }
+
+    .bilingual-tab.active { background: var(--clr-surface2); color: var(--clr-text); border-color: rgba(255,255,255,0.15); }
+
+    .bilingual-text { color: var(--clr-text); line-height: 1.6; }
+    .bilingual-text.bn { font-family: 'Noto Sans Bengali', sans-serif; }
+
+    .evidence-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .evidence-item {
+      background: var(--clr-surface2);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+    }
+
+    .evidence-key {
+      font-size: 0.66rem;
+      color: var(--clr-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .evidence-val {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #fff;
+      margin-top: 2px;
+    }
+
+    .alert-disclaimer {
+      font-size: 0.72rem;
+      color: var(--clr-muted);
+      font-style: italic;
+      border-top: 1px solid var(--clr-border);
+      padding-top: 8px;
+      margin-top: 8px;
+    }
+
+    .alert-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .btn {
+      padding: 6px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 0.78rem;
+      font-family: inherit;
+      cursor: pointer;
+      transition: var(--transition);
+      font-weight: 500;
+      border: none;
+    }
+
+    .btn-primary { background: var(--clr-accent); color: #fff; }
+    .btn-primary:hover { filter: brightness(1.1); }
+
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--clr-border);
+      color: var(--clr-muted);
+    }
+
+    .btn-ghost:hover { border-color: rgba(255,255,255,0.2); color: var(--clr-text); }
+
+    /* ============================================================
+       PROVIDER STATUS STRIP
+       ============================================================ */
+    .provider-strip {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    .provider-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--clr-surface);
+      border: 1px solid var(--clr-border);
+      border-radius: var(--radius);
+      padding: 10px 16px;
+      flex: 1;
+      min-width: 180px;
+    }
+
+    .provider-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .provider-dot.healthy { background: var(--clr-green); box-shadow: 0 0 6px var(--clr-green); }
+    .provider-dot.degraded { background: var(--clr-red); box-shadow: 0 0 6px var(--clr-red); animation: pulse 1s infinite; }
+
+    .provider-name { font-weight: 600; font-size: 0.88rem; }
+    .provider-delay { font-size: 0.72rem; color: var(--clr-muted); margin-left: auto; }
+
+    /* ============================================================
+       AGENT TABLE
+       ============================================================ */
+    .agents-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 24px;
+    }
+
+    .agents-table th {
+      text-align: left;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: var(--clr-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--clr-border);
+    }
+
+    .agents-table td {
+      padding: 10px 12px;
+      font-size: 0.82rem;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      vertical-align: middle;
+    }
+
+    .agents-table tr:hover td { background: var(--clr-surface2); }
+
+    .balance-bar-wrap { width: 100px; }
+    .balance-bar-bg { background: var(--clr-surface2); border-radius: 4px; height: 6px; overflow: hidden; }
+    .balance-bar-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+
+    /* ============================================================
+       CASE BOARD
+       ============================================================ */
+    .case-board {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    .case-column { }
+
+    .case-column-header {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--clr-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 10px;
+      padding: 6px 10px;
+      background: var(--clr-surface);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--clr-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .case-card {
+      background: var(--clr-surface);
+      border: 1px solid var(--clr-border);
+      border-radius: var(--radius);
+      padding: 14px;
+      margin-bottom: 10px;
+      transition: var(--transition);
+    }
+
+    .case-card:hover { border-color: rgba(255,255,255,0.14); }
+
+    .case-id { font-size: 0.68rem; color: var(--clr-muted); margin-bottom: 6px; font-family: monospace; }
+    .case-title { font-size: 0.82rem; font-weight: 500; color: #fff; line-height: 1.4; margin-bottom: 8px; }
+    .case-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .case-owner { font-size: 0.7rem; color: var(--clr-muted); background: var(--clr-surface2); padding: 2px 6px; border-radius: 4px; }
+
+    /* ============================================================
+       EMPTY STATE
+       ============================================================ */
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+      color: var(--clr-muted);
+    }
+
+    .empty-icon { font-size: 2.5rem; margin-bottom: 12px; }
+    .empty-text { font-size: 0.88rem; }
+
+    /* ============================================================
+       LOADING SPINNER
+       ============================================================ */
+    .spinner {
+      display: inline-block;
+      width: 18px; height: 18px;
+      border: 2px solid rgba(255,255,255,0.1);
+      border-top-color: var(--clr-accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-state {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--clr-muted);
+      font-size: 0.85rem;
+      padding: 24px;
+      justify-content: center;
+    }
+
+    /* ============================================================
+       TOAST NOTIFICATIONS
+       ============================================================ */
+    #toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .toast {
+      background: var(--clr-surface2);
+      border: 1px solid var(--clr-border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      font-size: 0.82rem;
+      color: var(--clr-text);
+      min-width: 260px;
+      animation: slideIn 0.2s ease;
+      box-shadow: var(--shadow);
+    }
+
+    .toast.success { border-left: 3px solid var(--clr-green); }
+    .toast.error   { border-left: 3px solid var(--clr-red); }
+    .toast.info    { border-left: 3px solid var(--clr-blue); }
+
+    @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+
+    /* ============================================================
+       RESPONSIVE
+       ============================================================ */
+    @media (max-width: 768px) {
+      .app-shell {
+        grid-template-columns: 1fr;
+        grid-template-rows: 60px auto 1fr;
+      }
+      .sidebar { display: none; }
+      .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- ===== TOP BAR ===== -->
+  <header class="topbar" id="topbar">
+    <div class="topbar-brand">
+      <div class="brand-dot"></div>
+      LiquidityIQ
+    </div>
+    <div class="topbar-meta" id="sim-meta">Simulation: Loading…</div>
+    <div class="topbar-spacer"></div>
+
+    <!-- Role switcher -->
+    <div class="role-switcher" id="role-switcher">
+      <button class="role-btn active" data-role="field_officer" id="btn-role-fo">Field Officer</button>
+      <button class="role-btn" data-role="agent" id="btn-role-agent">Agent</button>
+      <button class="role-btn" data-role="compliance_analyst" id="btn-role-ca">Compliance</button>
+    </div>
+
+    <!-- Chaos toggle -->
+    <button class="chaos-btn" id="chaos-btn" title="Scenario C: simulate provider feed failure">
+      ⚡ Chaos Off
+    </button>
+  </header>
+
+  <!-- ===== SIDEBAR ===== -->
+  <nav class="sidebar">
+    <div class="nav-section-label">Overview</div>
+    <div class="nav-item active" data-view="dashboard" id="nav-dashboard">
+      <span class="nav-icon">📊</span> Dashboard
+    </div>
+    <div class="nav-item" data-view="alerts" id="nav-alerts">
+      <span class="nav-icon">🔔</span> Alerts
+      <span class="nav-badge" id="alert-badge">…</span>
+    </div>
+
+    <div class="nav-section-label">Agents</div>
+    <div class="nav-item" data-view="agents" id="nav-agents">
+      <span class="nav-icon">👤</span> Agent Board
+    </div>
+    <div class="nav-item" data-view="liquidity" id="nav-liquidity">
+      <span class="nav-icon">💧</span> Liquidity
+    </div>
+
+    <div class="nav-section-label">Operations</div>
+    <div class="nav-item" data-view="cases" id="nav-cases">
+      <span class="nav-icon">📋</span> Case Board
+    </div>
+    <div class="nav-item" data-view="transactions" id="nav-txns">
+      <span class="nav-icon">💳</span> Transactions
+    </div>
+
+    <div class="nav-section-label">System</div>
+    <div class="nav-item" data-view="providers" id="nav-providers">
+      <span class="nav-icon">🔗</span> Providers
+    </div>
+  </nav>
+
+  <!-- ===== MAIN CONTENT ===== -->
+  <main class="main-content">
+
+    <!-- ---- VIEW: DASHBOARD ---- -->
+    <div class="view active" id="view-dashboard">
+      <div class="stat-grid" id="stat-grid">
+        <div class="stat-card" style="--accent:#e9149e">
+          <div class="stat-label">Total Agents</div>
+          <div class="stat-value" id="stat-agents">…</div>
+          <div class="stat-sub">Active super agents</div>
+        </div>
+        <div class="stat-card" style="--accent:#ef4444">
+          <div class="stat-label">Critical Alerts</div>
+          <div class="stat-value" id="stat-critical">…</div>
+          <div class="stat-sub">Require immediate action</div>
+        </div>
+        <div class="stat-card" style="--accent:#f59e0b">
+          <div class="stat-label">Unusual Activity</div>
+          <div class="stat-value" id="stat-review">…</div>
+          <div class="stat-sub">Require human review</div>
+        </div>
+        <div class="stat-card" style="--accent:#22c55e">
+          <div class="stat-label">Likely Normal</div>
+          <div class="stat-value" id="stat-normal">…</div>
+          <div class="stat-sub">Seasonal demand spikes</div>
+        </div>
+        <div class="stat-card" style="--accent:#06b6d4">
+          <div class="stat-label">Total Transactions</div>
+          <div class="stat-value" id="stat-txns">…</div>
+          <div class="stat-sub">Across all providers</div>
+        </div>
+        <div class="stat-card" style="--accent:#7c3aed">
+          <div class="stat-label">Providers</div>
+          <div class="stat-value">3</div>
+          <div class="stat-sub">bKash · Nagad · Rocket</div>
+        </div>
+      </div>
+
+      <!-- Provider feed status -->
+      <div class="section-header">
+        <div class="section-title">Provider Feed Status</div>
+      </div>
+      <div class="provider-strip" id="provider-strip">
+        <div class="loading-state"><div class="spinner"></div> Loading feed status…</div>
+      </div>
+
+      <!-- Top alerts -->
+      <div class="section-header">
+        <div class="section-title">Priority Alerts</div>
+        <div class="section-count" id="priority-count">0</div>
+      </div>
+      <div class="alert-list" id="dashboard-alert-list">
+        <div class="loading-state"><div class="spinner"></div> Loading alerts…</div>
+      </div>
+    </div>
+
+    <!-- ---- VIEW: ALERTS ---- -->
+    <div class="view" id="view-alerts">
+      <div class="section-header">
+        <div class="section-title">All Alerts</div>
+        <div class="section-count" id="all-alert-count">0</div>
+        <button class="btn btn-primary" style="margin-left:auto" id="create-cases-btn">
+          📋 Create Cases from Alerts
+        </button>
+      </div>
+      <div class="alert-list" id="all-alert-list">
+        <div class="loading-state"><div class="spinner"></div> Loading…</div>
+      </div>
+    </div>
+
+    <!-- ---- VIEW: AGENTS ---- -->
+    <div class="view" id="view-agents">
+      <div class="section-header">
+        <div class="section-title">Agent Board</div>
+        <div class="section-count" id="agent-count">0</div>
+      </div>
+      <table class="agents-table" id="agents-table">
+        <thead>
+          <tr>
+            <th>Agent</th>
+            <th>Area</th>
+            <th>Providers</th>
+            <th>Cash Available</th>
+            <th>Cash Bar</th>
+            <th>bKash Balance</th>
+            <th>Nagad Balance</th>
+            <th>Rocket Balance</th>
+          </tr>
+        </thead>
+        <tbody id="agents-tbody">
+          <tr><td colspan="8" class="loading-state"><div class="spinner"></div> Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ---- VIEW: LIQUIDITY ---- -->
+    <div class="view" id="view-liquidity">
+      <div class="section-header">
+        <div class="section-title">Liquidity Projections</div>
+        <div class="section-count" id="liq-count">0</div>
+      </div>
+      <div class="alert-list" id="liquidity-list">
+        <div class="loading-state"><div class="spinner"></div> Loading projections…</div>
+      </div>
+    </div>
+
+    <!-- ---- VIEW: CASES ---- -->
+    <div class="view" id="view-cases">
+      <div class="section-header">
+        <div class="section-title">Case Board</div>
+        <div class="section-count" id="case-count">0</div>
+        <button class="btn btn-ghost" style="margin-left:auto" id="refresh-cases-btn">🔄 Refresh</button>
+      </div>
+      <div class="case-board" id="case-board">
+        <div class="loading-state" style="grid-column:1/-1"><div class="spinner"></div> Loading cases…</div>
+      </div>
+    </div>
+
+    <!-- ---- VIEW: TRANSACTIONS ---- -->
+    <div class="view" id="view-transactions">
+      <div class="section-header">
+        <div class="section-title">Transaction Log</div>
+        <div class="section-count" id="txn-count">0</div>
+      </div>
+      <table class="agents-table" id="txn-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Agent</th>
+            <th>Provider</th>
+            <th>Type</th>
+            <th>Amount (BDT)</th>
+            <th>Status</th>
+            <th>Account</th>
+          </tr>
+        </thead>
+        <tbody id="txn-tbody">
+          <tr><td colspan="7" class="loading-state"><div class="spinner"></div> Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ---- VIEW: PROVIDERS ---- -->
+    <div class="view" id="view-providers">
+      <div class="section-header">
+        <div class="section-title">Provider Health</div>
+      </div>
+      <div id="provider-health-detail">
+        <div class="loading-state"><div class="spinner"></div> Loading…</div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- ============================================================
+     JAVASCRIPT
+     ============================================================ -->
+<script>
+const API = 'http://localhost:8000';
+let currentRole = 'field_officer';
+let chaosActive = false;
+let cachedAlerts = [];
+let cachedCases = [];
+
+// ---- UTILS ----
+
+function fmtBDT(n) {
+  if (n == null) return '—';
+  return 'BDT ' + Number(n).toLocaleString('en-BD', { maximumFractionDigits: 0 });
+}
+
+function fmtTime(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleTimeString('en-BD', { hour: '2-digit', minute: '2-digit' });
+  } catch { return iso; }
+}
+
+function toast(msg, type = 'info', dur = 3000) {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), dur);
+}
+
+async function apiFetch(path, opts = {}) {
+  try {
+    const r = await fetch(API + path, opts);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return await r.json();
+  } catch (e) {
+    toast(`API error: ${e.message}`, 'error');
+    return null;
+  }
+}
+
+// ---- NAVIGATION ----
+
+function switchView(viewId) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const view = document.getElementById(`view-${viewId}`);
+  const nav  = document.getElementById(`nav-${viewId}`);
+  if (view) view.classList.add('active');
+  if (nav)  nav.classList.add('active');
+}
+
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    const viewId = item.dataset.view;
+    switchView(viewId);
+    if (viewId === 'alerts')       loadAlerts();
+    if (viewId === 'agents')       loadAgents();
+    if (viewId === 'liquidity')    loadLiquidity();
+    if (viewId === 'cases')        loadCases();
+    if (viewId === 'transactions') loadTransactions();
+    if (viewId === 'providers')    loadProviderHealth();
+  });
+});
+
+// ---- ROLE SWITCHER ----
+
+document.querySelectorAll('.role-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.role-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentRole = btn.dataset.role;
+    toast(`Switched to ${currentRole.replace('_', ' ')} view`, 'info', 1500);
+    // Re-render current alerts in new role framing
+    renderAlerts(cachedAlerts, document.getElementById('dashboard-alert-list'), 4);
+    renderAlerts(cachedAlerts, document.getElementById('all-alert-list'));
+  });
+});
+
+// ---- CHAOS TOGGLE ----
+
+document.getElementById('chaos-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('chaos-btn');
+  if (!chaosActive) {
+    // Degrade Rocket
+    const result = await apiFetch('/api/v1/system/chaos/degrade/rocket', { method: 'POST' });
+    if (result) {
+      chaosActive = true;
+      btn.textContent = '⚡ Chaos ON';
+      btn.classList.add('active');
+      toast('Rocket feed degraded — confidence dropping on affected alerts', 'error', 4000);
+      loadAll();
+    }
+  } else {
+    const result = await apiFetch('/api/v1/system/chaos/restore/rocket', { method: 'POST' });
+    if (result) {
+      chaosActive = false;
+      btn.textContent = '⚡ Chaos Off';
+      btn.classList.remove('active');
+      toast('Rocket feed restored — confidence recovering', 'info', 3000);
+      loadAll();
+    }
+  }
+});
+
+// ---- ALERT RENDERING ----
+
+function alertIcon(type) {
+  const icons = {
+    structuring_pattern: '🔍',
+    liquidity_shortage: '💧',
+    volume_spike_normal: '📈',
+    volume_spike_review: '⚠️',
+    feed_degraded: '📡',
+  };
+  return icons[type] || '🔔';
+}
+
+function classificationLabel(cls) {
+  const labels = {
+    likely_normal: 'Likely Normal',
+    requires_review: 'Requires Review',
+    data_quality_issue: 'Data Quality Issue',
+  };
+  return labels[cls] || cls;
+}
+
+function confBadgeClass(conf) {
+  return `badge-conf-${conf}`;
+}
+
+function sevBadgeClass(sev) {
+  return `badge-severity-${sev}`;
+}
+
+function renderAlerts(alerts, container, limit = 999) {
+  if (!container) return;
+  if (!alerts || alerts.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-text">No alerts to show</div></div>`;
+    return;
+  }
+
+  const toShow = alerts.slice(0, limit);
+  container.innerHTML = toShow.map((a, i) => {
+    const evidenceKeys = Object.keys(a.evidence || {}).slice(0, 6);
+    const evidenceHtml = evidenceKeys.map(k => {
+      let val = a.evidence[k];
+      if (typeof val === 'number') val = val.toLocaleString('en-BD', { maximumFractionDigits: 2 });
+      return `<div class="evidence-item"><div class="evidence-key">${k.replace(/_/g,' ')}</div><div class="evidence-val">${val}</div></div>`;
+    }).join('');
+
+    const narration = a._narration || {};
+    const langHtml = narration.english ? `
+      <div class="alert-bilingual" id="bil-${i}">
+        <div class="bilingual-tab-row">
+          <button class="bilingual-tab active" onclick="switchLang(${i},'en')">English</button>
+          <button class="bilingual-tab" onclick="switchLang(${i},'bn')">বাংলা</button>
+          <button class="bilingual-tab" onclick="switchLang(${i},'bl')">Banglish</button>
+        </div>
+        <div class="bilingual-text" id="bil-text-${i}-en">${narration.english || ''}</div>
+        <div class="bilingual-text bn" id="bil-text-${i}-bn" style="display:none">${narration.bangla || ''}</div>
+        <div class="bilingual-text" id="bil-text-${i}-bl" style="display:none">${narration.banglish || ''}</div>
+      </div>` : '';
+
+    return `
+    <div class="alert-card ${a.severity}" id="alert-card-${i}">
+      <div class="alert-header">
+        <div class="alert-icon">${alertIcon(a.alert_type)}</div>
+        <div class="alert-title">${a.title || a.alert_type}</div>
+      </div>
+      <div class="alert-badges">
+        <span class="badge ${sevBadgeClass(a.severity)}">${a.severity.toUpperCase()}</span>
+        <span class="badge ${confBadgeClass(a.confidence)}">Confidence: ${a.confidence.toUpperCase()}</span>
+        <span class="badge badge-class-${a.classification}">${classificationLabel(a.classification)}</span>
+        <span class="badge badge-provider">${a.provider}</span>
+        <span class="badge" style="background:rgba(255,255,255,0.05);color:var(--clr-muted);border-color:transparent">${a.agent_id}</span>
+      </div>
+      <div class="alert-summary">${a.summary || ''}</div>
+      ${langHtml}
+      <div class="evidence-grid">${evidenceHtml}</div>
+      <div class="alert-disclaimer">⚠️ ${a.disclaimer || 'This is not a final determination. Human review is required before any action.'}</div>
+      <div class="alert-actions">
+        <button class="btn btn-ghost" onclick="toggleBilingual(${i})">🌐 Bilingual</button>
+        <button class="btn btn-primary" onclick="createCase(${i})">📋 Open Case</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleBilingual(i) {
+  const el = document.getElementById(`bil-${i}`);
+  if (!el) return;
+  el.classList.toggle('visible');
+}
+
+function switchLang(i, lang) {
+  ['en','bn','bl'].forEach(l => {
+    const el = document.getElementById(`bil-text-${i}-${l}`);
+    if (el) el.style.display = l === lang ? 'block' : 'none';
+  });
+  document.querySelectorAll(`#bil-${i} .bilingual-tab`).forEach((tab, idx) => {
+    tab.classList.toggle('active', ['en','bn','bl'][idx] === lang);
+  });
+}
+
+// ---- CREATE CASE ----
+
+async function createCase(alertIndex) {
+  const alert = cachedAlerts[alertIndex];
+  if (!alert) return;
+  toast('Creating case…', 'info', 1500);
+  // POST create-from-alerts fetches all alerts; for demo we use existing endpoint
+  const result = await apiFetch('/api/v1/cases/create-from-alerts', { method: 'POST' });
+  if (result) {
+    toast(`${result.created} case(s) created`, 'success');
+    cachedCases = result.cases || [];
+    document.getElementById('case-count').textContent = cachedCases.length;
+  }
+}
+
+document.getElementById('create-cases-btn')?.addEventListener('click', async () => {
+  const result = await apiFetch('/api/v1/cases/create-from-alerts', { method: 'POST' });
+  if (result) {
+    toast(`${result.created} case(s) created from alerts`, 'success');
+    cachedCases = result.cases || [];
+    renderCaseBoard(cachedCases);
+  }
+});
+
+// ---- LOAD FUNCTIONS ----
+
+async function loadSummary() {
+  const data = await apiFetch('/api/v1/data/summary');
+  if (!data) return;
+
+  document.getElementById('stat-txns').textContent = (data.total_transactions || 0).toLocaleString();
+  document.getElementById('stat-agents').textContent = data.agents || '…';
+  document.getElementById('sim-meta').textContent =
+    `Simulation: ${data.sim_date ? data.sim_date.slice(0,10) : ''}  |  ${data.total_transactions} txns`;
+}
+
+async function loadAlertStats() {
+  const data = await apiFetch('/api/v1/analytics/alerts');
+  if (!data) return;
+
+  cachedAlerts = (data.alerts || []).map(a => ({ ...a, _narration: {} }));
+
+  const critical = cachedAlerts.filter(a => a.severity === 'critical').length;
+  const review = cachedAlerts.filter(a => a.classification === 'requires_review').length;
+  const normal = cachedAlerts.filter(a => a.classification === 'likely_normal').length;
+
+  document.getElementById('stat-critical').textContent = critical;
+  document.getElementById('stat-review').textContent = review;
+  document.getElementById('stat-normal').textContent = normal;
+  document.getElementById('alert-badge').textContent = cachedAlerts.length;
+  document.getElementById('priority-count').textContent = Math.min(cachedAlerts.length, 4);
+  document.getElementById('all-alert-count').textContent = cachedAlerts.length;
+
+  // Pre-fetch narration for first 6 alerts
+  for (let i = 0; i < Math.min(6, cachedAlerts.length); i++) {
+    const narr = await apiFetch(`/api/v1/narration/alert/${i}`);
+    if (narr && narr.narration) cachedAlerts[i]._narration = narr.narration;
+  }
+
+  renderAlerts(cachedAlerts, document.getElementById('dashboard-alert-list'), 4);
+  renderAlerts(cachedAlerts, document.getElementById('all-alert-list'));
+}
+
+async function loadProviderStrip() {
+  const health = await apiFetch('/api/v1/system/health');
+  if (!health) return;
+
+  const providers = ['bkash', 'nagad', 'rocket'];
+  const providerData = health.providers || {};
+  const chaosState = health.chaos_state || {};
+
+  const strip = document.getElementById('provider-strip');
+  strip.innerHTML = providers.map(p => {
+    const pd = providerData[p] || {};
+    const degraded = chaosState.degraded_providers?.includes(p) || !pd.is_healthy;
+    return `
+    <div class="provider-card">
+      <div class="provider-dot ${degraded ? 'degraded' : 'healthy'}"></div>
+      <div>
+        <div class="provider-name">${p.charAt(0).toUpperCase() + p.slice(1)}</div>
+        <div style="font-size:0.7rem;color:var(--clr-muted)">${degraded ? 'Feed degraded' : 'Feed healthy'}</div>
+      </div>
+      <div class="provider-delay">${pd.delay_seconds ? `${pd.delay_seconds}s delay` : 'Live'}</div>
+    </div>`;
+  }).join('');
+}
+
+async function loadAlerts() {
+  const list = document.getElementById('all-alert-list');
+  if (cachedAlerts.length > 0) {
+    renderAlerts(cachedAlerts, list);
+    return;
+  }
+  list.innerHTML = '<div class="loading-state"><div class="spinner"></div> Loading…</div>';
+  await loadAlertStats();
+}
+
+async function loadAgents() {
+  const tbody = document.getElementById('agents-tbody');
+  tbody.innerHTML = '<tr><td colspan="8" class="loading-state"><div class="spinner"></div> Loading…</td></tr>';
+
+  const data = await apiFetch('/api/v1/agents');
+  if (!data || !data.agents) return;
+
+  const agents = data.agents;
+  document.getElementById('agent-count').textContent = agents.length;
+
+  const maxCash = Math.max(...agents.map(a => a.shared_cash?.cash_amount || 0), 1);
+
+  tbody.innerHTML = agents.map(a => {
+    const cash = a.shared_cash?.cash_amount || 0;
+    const cashPct = Math.round((cash / maxCash) * 100);
+    const barColor = cashPct > 50 ? 'var(--clr-green)' : cashPct > 20 ? 'var(--clr-yellow)' : 'var(--clr-red)';
+
+    const balances = a.provider_balances || {};
+    const bkash  = balances.bkash?.emoney_balance;
+    const nagad  = balances.nagad?.emoney_balance;
+    const rocket = balances.rocket?.emoney_balance;
+
+    return `<tr>
+      <td><strong>${a.name || a.agent_id}</strong><br><span style="font-size:0.7rem;color:var(--clr-muted)">${a.agent_id}</span></td>
+      <td>${a.area || '—'}</td>
+      <td>${(a.active_providers || []).join(' · ')}</td>
+      <td>${fmtBDT(cash)}</td>
+      <td>
+        <div class="balance-bar-wrap">
+          <div class="balance-bar-bg">
+            <div class="balance-bar-fill" style="width:${cashPct}%;background:${barColor}"></div>
+          </div>
+        </div>
+      </td>
+      <td>${bkash != null ? fmtBDT(bkash) : '—'}</td>
+      <td>${nagad != null ? fmtBDT(nagad) : '—'}</td>
+      <td>${rocket != null ? fmtBDT(rocket) : '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function loadLiquidity() {
+  const list = document.getElementById('liquidity-list');
+  list.innerHTML = '<div class="loading-state"><div class="spinner"></div> Loading…</div>';
+
+  const data = await apiFetch('/api/v1/analytics/liquidity');
+  if (!data) return;
+
+  const projections = data.projections || [];
+  document.getElementById('liq-count').textContent = projections.length;
+
+  if (projections.length === 0) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">💧</div><div class="empty-text">No liquidity projections</div></div>';
+    return;
+  }
+
+  list.innerHTML = projections.map(p => {
+    const minStr = p.minutes_remaining != null
+      ? `~${Math.round(p.minutes_remaining)} min remaining`
+      : 'Stable (not draining)';
+    const severity = p.severity === 'critical' ? 'critical' : p.severity === 'warning' ? 'warning' : 'info';
+
+    return `
+    <div class="alert-card ${severity}">
+      <div class="alert-header">
+        <div class="alert-icon">💧</div>
+        <div class="alert-title">${p.agent_id} — ${p.balance_type}</div>
+      </div>
+      <div class="alert-badges">
+        <span class="badge ${sevBadgeClass(severity)}">${severity.toUpperCase()}</span>
+        <span class="badge ${confBadgeClass(p.confidence)}">Confidence: ${p.confidence.toUpperCase()}</span>
+        ${p.provider ? `<span class="badge badge-provider">${p.provider}</span>` : ''}
+      </div>
+      <div class="alert-summary">
+        Balance: <strong>${fmtBDT(p.current_balance)}</strong> ·
+        Velocity: <strong>${fmtBDT(p.velocity_per_hour)}/hr</strong> ·
+        <strong>${minStr}</strong>
+      </div>
+      <div class="alert-summary" style="font-size:0.75rem;margin-top:-4px;color:var(--clr-muted)">${p.confidence_reason}</div>
+    </div>`;
+  }).join('');
+}
+
+async function loadCases() {
+  const board = document.getElementById('case-board');
+  board.innerHTML = '<div class="loading-state" style="grid-column:1/-1"><div class="spinner"></div> Loading…</div>';
+
+  const data = await apiFetch('/api/v1/cases');
+  if (!data) return;
+
+  cachedCases = data.cases || [];
+  document.getElementById('case-count').textContent = cachedCases.length;
+  renderCaseBoard(cachedCases);
+}
+
+function renderCaseBoard(cases) {
+  const board = document.getElementById('case-board');
+  if (!cases || cases.length === 0) {
+    board.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <div class="empty-icon">📋</div>
+      <div class="empty-text">No cases yet. Go to Alerts and click "Create Cases from Alerts".</div>
+    </div>`;
+    return;
+  }
+
+  const statuses = ['open','assigned','acknowledged','escalated','resolved'];
+  const statusColors = { open:'#ef4444', assigned:'#f59e0b', acknowledged:'#3b82f6', escalated:'#e9149e', resolved:'#22c55e' };
+
+  board.innerHTML = statuses.map(status => {
+    const cols = cases.filter(c => c.status === status);
+    const cardsHtml = cols.length === 0
+      ? `<div style="font-size:0.75rem;color:var(--clr-muted);padding:8px;text-align:center">Empty</div>`
+      : cols.map(c => `
+        <div class="case-card">
+          <div class="case-id">${c.case_id}</div>
+          <div class="case-title">${c.title || c.alert_type}</div>
+          <div class="case-meta">
+            <span class="badge badge-provider">${c.provider}</span>
+            <span class="badge ${confBadgeClass(c.confidence)}">${c.confidence}</span>
+          </div>
+          ${c.current_owner_role ? `<div class="case-owner" style="margin-top:6px">👤 ${c.current_owner_role.replace('_',' ')}</div>` : ''}
+          <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+            ${c.status !== 'assigned' && c.status !== 'resolved'
+              ? `<button class="btn btn-ghost" style="font-size:0.7rem;padding:3px 10px" onclick="caseAction('${c.case_id}','assign')">Assign</button>` : ''}
+            ${c.status === 'assigned'
+              ? `<button class="btn btn-ghost" style="font-size:0.7rem;padding:3px 10px" onclick="caseAction('${c.case_id}','acknowledge')">Acknowledge</button>` : ''}
+            ${c.status === 'acknowledged'
+              ? `<button class="btn btn-ghost" style="font-size:0.7rem;padding:3px 10px" onclick="caseAction('${c.case_id}','escalate')">Escalate</button>` : ''}
+            ${c.status !== 'resolved'
+              ? `<button class="btn btn-primary" style="font-size:0.7rem;padding:3px 10px" onclick="caseAction('${c.case_id}','resolve')">Resolve</button>` : ''}
+          </div>
+        </div>`).join('');
+
+    return `<div class="case-column">
+      <div class="case-column-header" style="border-left: 3px solid ${statusColors[status]}">
+        ${status.charAt(0).toUpperCase() + status.slice(1)}
+        <span>${cols.length}</span>
+      </div>
+      ${cardsHtml}
+    </div>`;
+  }).join('');
+}
+
+async function caseAction(caseId, action) {
+  let url = `/api/v1/cases/${caseId}/${action}`;
+  let opts = { method: 'POST' };
+  if (action === 'assign') url += '?role=field_officer';
+  if (action === 'resolve') url += '?note=Issue+reviewed+and+resolved+by+field+team';
+
+  const result = await apiFetch(url, opts);
+  if (result) {
+    toast(`Case ${caseId} → ${action}`, 'success');
+    loadCases();
+  }
+}
+
+document.getElementById('refresh-cases-btn')?.addEventListener('click', loadCases);
+
+async function loadTransactions() {
+  const tbody = document.getElementById('txn-tbody');
+  tbody.innerHTML = '<tr><td colspan="7" class="loading-state"><div class="spinner"></div> Loading…</td></tr>';
+
+  const data = await apiFetch('/api/v1/transactions?limit=100');
+  if (!data) return;
+
+  const txns = data.transactions || [];
+  document.getElementById('txn-count').textContent = txns.length;
+
+  const typeColors = { cash_in:'#22c55e', cash_out:'#ef4444', send_money:'#3b82f6', payment:'#f59e0b', recharge:'#06b6d4' };
+  const statusColors = { success:'#22c55e', failed:'#ef4444', pending:'#f59e0b' };
+
+  tbody.innerHTML = txns.map(t => `<tr>
+    <td>${fmtTime(t.timestamp)}</td>
+    <td>${t.agent_id}</td>
+    <td><span class="badge badge-provider">${t.provider}</span></td>
+    <td><span style="color:${typeColors[t.txn_type] || 'var(--clr-text)'}">${t.txn_type?.replace('_',' ')}</span></td>
+    <td style="font-weight:600">${Number(t.amount).toLocaleString('en-BD')}</td>
+    <td><span style="color:${statusColors[t.status] || 'var(--clr-muted)'}">${t.status}</span></td>
+    <td style="font-family:monospace;font-size:0.75rem">${(t.account_id || '').slice(0,12)}…</td>
+  </tr>`).join('');
+}
+
+async function loadProviderHealth() {
+  const container = document.getElementById('provider-health-detail');
+
+  const health = await apiFetch('/api/v1/system/health');
+  if (!health) return;
+
+  const providers = ['bkash', 'nagad', 'rocket'];
+  container.innerHTML = `
+    <div class="provider-strip">
+      ${providers.map(p => {
+        const pd = (health.providers || {})[p] || {};
+        const degraded = (health.chaos_state?.degraded_providers || []).includes(p) || !pd.is_healthy;
+        return `
+        <div class="provider-card" style="flex-direction:column;align-items:flex-start;gap:8px;min-width:220px">
+          <div style="display:flex;align-items:center;gap:10px;width:100%">
+            <div class="provider-dot ${degraded ? 'degraded' : 'healthy'}"></div>
+            <strong>${p.charAt(0).toUpperCase() + p.slice(1)}</strong>
+            <span class="provider-delay" style="margin-left:auto">${degraded ? '⚠ DEGRADED' : '✓ Healthy'}</span>
+          </div>
+          <div style="font-size:0.75rem;color:var(--clr-muted)">
+            Delay: ${pd.delay_seconds || 0}s · Agents: ${(pd.agents || []).length}
+          </div>
+          <div style="font-size:0.75rem;color:var(--clr-muted)">
+            Data fresh: ${pd.data_fresh !== false ? '✓' : '✗'}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="margin-top:16px">
+      <div class="section-title" style="margin-bottom:12px">Chaos Toggle State</div>
+      <pre style="background:var(--clr-surface2);border:1px solid var(--clr-border);border-radius:var(--radius);padding:16px;font-size:0.78rem;color:var(--clr-muted);overflow:auto">${JSON.stringify(health.chaos_state, null, 2)}</pre>
+    </div>`;
+}
+
+// ---- LOAD ALL ----
+
+async function loadAll() {
+  await loadSummary();
+  await loadProviderStrip();
+  await loadAlertStats();
+}
+
+// ---- INIT ----
+
+loadAll();
+</script>
+</body>
+</html>
