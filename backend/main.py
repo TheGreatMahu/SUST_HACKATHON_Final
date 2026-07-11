@@ -4,9 +4,13 @@ Segment 1: data generation + provider isolation endpoints
 Segment 2: analytics engine — liquidity projection, anomaly detection, chaos toggle
 Segment 3: LLM narration layer — bilingual alerts, stakeholder-specific framing
 Segment 4: case & coordination workflow — lifecycle, audit trail, escalation
+Segment 6: validation, metrics, and demo endpoints
 """
 
-from fastapi import FastAPI, Query
+from contextlib import asynccontextmanager
+import time
+
+from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import json
@@ -29,21 +33,10 @@ from backend.narration import NarrationEngine
 # Segment 4 imports
 from backend.workflow import CaseManager, CaseStatus, StakeholderRole
 
-# ---------------------------------------------------------------------------
-# App setup
-# ---------------------------------------------------------------------------
-app = FastAPI(
-    title="SuperAgent LiquidityIQ API",
-    description="Multi-provider MFS agent liquidity and anomaly decision-support system",
-    version="2.0.0",
-)
+# Segment 6 imports
+from backend.validation import ValidationEngine, LatencyMetrics
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
 
 # ---------------------------------------------------------------------------
 # Global state (loaded once at startup)
@@ -65,12 +58,18 @@ _narration_engine: Optional[NarrationEngine] = None
 # Segment 4 — case workflow state
 _case_manager: CaseManager = CaseManager()
 
+# Segment 6 — validation/metrics state
+_latency_metrics: LatencyMetrics = LatencyMetrics()
+_validation_report: Optional[dict] = None
+
 DATA_CACHE = Path("backend/data/generated_data.json")
 GT_CACHE   = Path("backend/data/ground_truth.json")
 
 
-@app.on_event("startup")
-async def startup():
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    """Application lifespan — initializes all segments on startup."""
     global _registry, _raw_data, _ground_truth
     global _liquidity_projector, _anomaly_detector, _alert_builder, _sim_end_time
     global _narration_engine
@@ -114,6 +113,28 @@ async def startup():
     print(f"[Startup] Narration mode: {_narration_engine.mode}")
     print(f"[Startup] Summary: {result['summary']}")
 
+    yield  # Application runs here
+
+    # Shutdown logic (if needed)
+    print("[Shutdown] Application shutting down.")
+
+
+# ---------------------------------------------------------------------------
+# App setup (MUST come after lifespan definition)
+# ---------------------------------------------------------------------------
+app = FastAPI(
+    title="SuperAgent LiquidityIQ API",
+    description="Multi-provider MFS agent liquidity and anomaly decision-support system",
+    version="3.0.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ---------------------------------------------------------------------------
 # Routes — Segment 1: Data & Provider Isolation
@@ -614,3 +635,140 @@ def get_case_audit(case_id: str):
         "audit_trail": [e.model_dump(mode="json") for e in case.audit_trail],
         "notification_log": case.notification_log,
     }
+
+
+# ---------------------------------------------------------------------------
+# Middleware — Segment 6: Latency Tracking
+# ---------------------------------------------------------------------------
+
+@app.middleware("http")
+async def latency_tracking_middleware(request: Request, call_next):
+    """Record response time for every API call."""
+    start = time.perf_counter()
+    response = await call_next(request)
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    _latency_metrics.record(request.url.path, elapsed_ms)
+    response.headers["X-Response-Time-Ms"] = f"{elapsed_ms:.2f}"
+    return response
+
+
+# ---------------------------------------------------------------------------
+# Routes — Segment 6: Validation & Metrics
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/metrics/validation")
+def run_validation():
+    """
+    Run the full validation report — compares analytics output against ground truth.
+    Returns precision/recall/F1, false-positive rates, narration safety, and workflow audit.
+    """
+    global _validation_report
+
+    if not _alert_builder or not _narration_engine or not _ground_truth:
+        return JSONResponse({"error": "system not ready"}, status_code=503)
+
+    feed_health = _chaos_state.get_health_overrides()
+
+    # Get all analytics output
+    liquidity = _liquidity_projector.get_shortage_alerts(
+        reference_time=_sim_end_time, feed_health=feed_health,
+    )
+    all_projections = _liquidity_projector.project_all_agents(
+        reference_time=_sim_end_time, feed_health=feed_health,
+    )
+    anomalies = _anomaly_detector.detect_all(
+        reference_time=_sim_end_time, feed_health=feed_health,
+    )
+    alerts = _alert_builder.build_all_alerts(liquidity, anomalies)
+
+    # Narrate all alerts
+    narrations = _narration_engine.narrate_batch(alerts)
+
+    # Create cases if none exist
+    if not _case_manager.all_cases:
+        alert_dicts = [a.model_dump(mode="json") for a in alerts]
+        _case_manager.create_cases_from_alerts(alert_dicts, narrations)
+
+    # Run validation
+    engine = ValidationEngine(
+        ground_truth=_ground_truth,
+        alerts=alerts,
+        projections=all_projections,
+        narrations=narrations,
+        cases=_case_manager.all_cases,
+        reference_time=_sim_end_time,
+        latency_metrics=_latency_metrics,
+    )
+
+    _validation_report = engine.generate_report()
+    return _validation_report
+
+
+@app.get("/api/v1/metrics/anomaly")
+def anomaly_metrics():
+    """Anomaly detection precision/recall/F1 against ground truth."""
+    if not _alert_builder or not _ground_truth:
+        return JSONResponse({"error": "system not ready"}, status_code=503)
+
+    feed_health = _chaos_state.get_health_overrides()
+    liquidity = _liquidity_projector.get_shortage_alerts(
+        reference_time=_sim_end_time, feed_health=feed_health,
+    )
+    anomalies = _anomaly_detector.detect_all(
+        reference_time=_sim_end_time, feed_health=feed_health,
+    )
+    alerts = _alert_builder.build_all_alerts(liquidity, anomalies)
+
+    from backend.validation import AnomalyMetrics
+    metrics = AnomalyMetrics(_ground_truth, alerts)
+    return metrics.compute()
+
+
+@app.get("/api/v1/metrics/latency")
+def latency_report():
+    """API latency P50/P95 across all recorded endpoints."""
+    return _latency_metrics.compute()
+
+
+@app.get("/api/v1/metrics/narration-safety")
+def narration_safety():
+    """Scan all narrations for banned words and disclaimer compliance."""
+    if not _alert_builder or not _narration_engine:
+        return JSONResponse({"error": "system not ready"}, status_code=503)
+
+    feed_health = _chaos_state.get_health_overrides()
+    liquidity = _liquidity_projector.get_shortage_alerts(
+        reference_time=_sim_end_time, feed_health=feed_health,
+    )
+    anomalies = _anomaly_detector.detect_all(
+        reference_time=_sim_end_time, feed_health=feed_health,
+    )
+    alerts = _alert_builder.build_all_alerts(liquidity, anomalies)
+    narrations = _narration_engine.narrate_batch(alerts)
+
+    from backend.validation import NarrationSafetyMetrics
+    metrics = NarrationSafetyMetrics(narrations)
+    return metrics.compute()
+
+
+@app.get("/api/v1/metrics/ground-truth")
+def ground_truth_summary():
+    """Ground truth events summary (for internal validation only)."""
+    if not _ground_truth:
+        return JSONResponse({"error": "ground truth not loaded"}, status_code=503)
+
+    return {
+        "count": len(_ground_truth),
+        "events": [
+            {
+                "event_type": e.get("event_type"),
+                "provider": e.get("provider"),
+                "agent_id": e.get("agent_id"),
+                "start_time": e.get("start_time"),
+                "end_time": e.get("end_time"),
+                "injected_txn_count": len(e.get("injected_txn_ids", [])),
+            }
+            for e in _ground_truth
+        ],
+    }
+

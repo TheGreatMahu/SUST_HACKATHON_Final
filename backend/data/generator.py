@@ -17,10 +17,7 @@ Ground-truth events injected:
 
 import random
 import math
-import uuid
 from datetime import datetime, timedelta
-from pathlib import Path
-import json
 
 from backend.models.data_models import (
     Provider, TransactionType, TransactionStatus,
@@ -124,9 +121,9 @@ GT_FEED_DELAY_PROV   = Provider.ROCKET
 # Helper utilities
 # ---------------------------------------------------------------------------
 
-def rng(seed: int = SEED):
-    r = random.Random(seed)
-    return r
+def rng(seed: int = SEED) -> random.Random:
+    """Create a seeded random number generator."""
+    return random.Random(seed)
 
 def poisson_arrivals(rate_per_hour: float, duration_minutes: float, r: random.Random) -> list[float]:
     """Return sorted list of offsets (in seconds) for Poisson arrivals."""
@@ -145,7 +142,8 @@ def pick_amount(txn_type: TransactionType, r: random.Random) -> float:
     log_lo, log_hi = math.log(lo), math.log(hi)
     return round(math.exp(r.uniform(log_lo, log_hi)), -1)  # round to nearest 10
 
-def pick_account(provider: Provider, agent_id: str, account_pool: list[str], r: random.Random) -> str:
+def pick_account(account_pool: list[str], r: random.Random) -> str:
+    """Pick a random account from the pool."""
     return r.choice(account_pool)
 
 
@@ -248,7 +246,7 @@ class SyntheticDataGenerator:
 
                 txn_type = pick_txn_type(self.r)
                 amount   = pick_amount(txn_type, self.r)
-                account  = pick_account(provider, agent_id, account_pool, self.r)
+                account  = pick_account(account_pool, self.r)
 
                 txns.append(Transaction(
                     provider=provider,
@@ -295,7 +293,7 @@ class SyntheticDataGenerator:
                 timestamp=ts,
                 status=TransactionStatus.SUCCESS,
             )
-            t._injected_label = "structuring_burst"
+            t.injected_label = "structuring_burst"
             txns.append(t)
             txn_ids.append(t.txn_id)
 
@@ -339,7 +337,7 @@ class SyntheticDataGenerator:
                 timestamp=ts,
                 status=TransactionStatus.SUCCESS,
             )
-            t._injected_label = "legitimate_spike"
+            t.injected_label = "legitimate_spike"
             txns.append(t)
             txn_ids.append(t.txn_id)
 

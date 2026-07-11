@@ -27,7 +27,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Optional
 from collections import defaultdict
-import math
 import statistics
 
 from backend.models.data_models import (
@@ -52,7 +51,6 @@ STRUCTURING_MAX_CV = 0.10              # Coefficient of variation — low = simi
 STRUCTURING_SCORE_THRESHOLD = 0.65     # Composite score threshold to flag
 
 # Volume z-score
-ZSCORE_WINDOW_HOURS = 1
 ZSCORE_BASELINE_HOURS = 6              # Use first 6 hours as baseline
 ZSCORE_THRESHOLD_REVIEW = 2.5         # Z > 2.5 needs review
 ZSCORE_THRESHOLD_SPIKE = 1.8           # Z > 1.8 is elevated

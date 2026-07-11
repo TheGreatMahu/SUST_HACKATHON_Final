@@ -116,7 +116,7 @@ class Transaction(BaseModel):
     timestamp: datetime
     status: TransactionStatus
     # Ground-truth injection label (never shown in UI; used only for metrics)
-    _injected_label: Optional[str] = None
+    injected_label: Optional[str] = Field(None, exclude=True)
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +130,7 @@ class GroundTruthEvent(BaseModel):
     agent_id: str
     start_time: datetime
     end_time: datetime
-    injected_txn_ids: list[str] = []
+    injected_txn_ids: list[str] = Field(default_factory=list)
     notes: str = ""
 
 
@@ -146,4 +146,4 @@ class ProviderFeed(BaseModel):
     transactions: list[Transaction]
     feed_healthy: bool = True
     delay_seconds: int = 0   # simulated network delay
-    missing_agents: list[str] = []   # agent IDs with no data in this snapshot
+    missing_agents: list[str] = Field(default_factory=list)   # agent IDs with no data in this snapshot

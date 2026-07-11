@@ -220,8 +220,12 @@ def run_exit_test():
     sample_narration = narrator.narrate(first_struct)
     print("Sample Bilingual Alert Narration:")
     print(f"  EN: {sample_narration['english']}")
-    print(f"  BN: {sample_narration['bangla']}")
-    print(f"  Banglish: {sample_narration['banglish']}")
+    try:
+        print(f"  BN: {sample_narration['bangla']}")
+        print(f"  Banglish: {sample_narration['banglish']}")
+    except UnicodeEncodeError:
+        print(f"  BN: [Bangla text present, {len(sample_narration['bangla'])} chars — cannot display in this terminal encoding]")
+        print(f"  Banglish: {sample_narration.get('banglish', 'N/A')}")
     print()
     print(f"Narration mode: {narrator.mode}")
     print(f"Total cases created: {len(case_manager.all_cases)}")
