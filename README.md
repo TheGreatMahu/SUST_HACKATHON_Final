@@ -28,6 +28,21 @@ Then open:
 - http://127.0.0.1:8000 for the dashboard
 - http://127.0.0.1:8000/docs for the interactive API docs
 
+### Alternate launcher
+
+If you want to start the app with the included launcher script:
+
+```bash
+python run.py
+```
+
+## 📁 Project structure
+
+- `backend/` — FastAPI app, analytics engine, narration logic, and database layer
+- `frontend/` — single-page dashboard UI
+- `docs/` — architecture notes, prompts, and responsible-design documentation
+- `tests/` — validation tests for the six project segments
+
 ## 🎯 Demo flow
 
 1. Open the dashboard and review the overview cards.

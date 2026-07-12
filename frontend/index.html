@@ -893,6 +893,48 @@ function fmtTime(iso) {
   } catch { return iso; }
 }
 
+function normalizeArrayPayload(data, key) {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === 'object') {
+    if (Array.isArray(data[key])) return data[key];
+    if (Array.isArray(data.items)) return data.items;
+    if (Array.isArray(data.results)) return data.results;
+  }
+  return [];
+}
+
+function normalizeAlert(item) {
+  const severity = (item.severity || item.severity_level || 'info').toString().toLowerCase();
+  const confidence = (item.confidence || item.confidence_level || 'medium').toString().toLowerCase();
+  const classification = (item.classification || item.classification_level || 'likely_normal').toString().toLowerCase();
+  return {
+    ...item,
+    severity,
+    confidence,
+    classification,
+    alert_type: item.alert_type || item.type || 'alert',
+    title: item.title || item.summary || item.alert_type || 'Alert',
+    summary: item.summary || item.title || item.recommended_action || '',
+    provider: item.provider || 'unknown',
+    evidence: item.evidence || {},
+    _narration: item._narration || {},
+  };
+}
+
+function normalizeAgent(item) {
+  const sharedCash = item.shared_cash || item.sharedCash || {};
+  const providerBalances = item.provider_balances || item.providerBalances || {};
+  return {
+    ...item,
+    agent_id: item.agent_id || item.agentId || item.id || 'unknown',
+    name: item.agent_name || item.name || item.agent_id || 'Unknown agent',
+    area: item.area || item.location || '—',
+    shared_cash: sharedCash,
+    provider_balances: providerBalances,
+    active_providers: item.active_providers || Object.keys(providerBalances),
+  };
+}
+
 function toast(msg, type = 'info', dur = 3000) {
   const el = document.createElement('div');
   el.className = `toast ${type}`;
@@ -1008,12 +1050,13 @@ function sevBadgeClass(sev) {
 
 function renderAlerts(alerts, container, limit = 999) {
   if (!container) return;
-  if (!alerts || alerts.length === 0) {
+  const normalizedAlerts = (alerts || []).map(normalizeAlert);
+  if (!normalizedAlerts || normalizedAlerts.length === 0) {
     container.innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-text">No alerts to show</div></div>`;
     return;
   }
 
-  const toShow = alerts.slice(0, limit);
+  const toShow = normalizedAlerts.slice(0, limit);
   container.innerHTML = toShow.map((a, i) => {
     const evidenceKeys = Object.keys(a.evidence || {}).slice(0, 6);
     const evidenceHtml = evidenceKeys.map(k => {
@@ -1116,7 +1159,8 @@ async function loadAlertStats() {
   const data = await apiFetch('/api/v1/analytics/alerts');
   if (!data) return;
 
-  cachedAlerts = (data.alerts || []).map(a => ({ ...a, _narration: {} }));
+  const rawAlerts = normalizeArrayPayload(data, 'alerts');
+  cachedAlerts = rawAlerts.map(a => ({ ...normalizeAlert(a), _narration: {} }));
 
   const critical = cachedAlerts.filter(a => a.severity === 'critical').length;
   const review = cachedAlerts.filter(a => a.classification === 'requires_review').length;
@@ -1178,15 +1222,15 @@ async function loadAgents() {
   tbody.innerHTML = '<tr><td colspan="8" class="loading-state"><div class="spinner"></div> Loading…</td></tr>';
 
   const data = await apiFetch('/api/v1/agents');
-  if (!data || !data.agents) return;
+  const agents = normalizeArrayPayload(data, 'agents').map(normalizeAgent);
+  if (agents.length === 0) return;
 
-  const agents = data.agents;
   document.getElementById('agent-count').textContent = agents.length;
 
-  const maxCash = Math.max(...agents.map(a => a.shared_cash?.cash_amount || 0), 1);
+  const maxCash = Math.max(...agents.map(a => a.shared_cash?.amount || a.shared_cash?.cash_amount || 0), 1);
 
   tbody.innerHTML = agents.map(a => {
-    const cash = a.shared_cash?.cash_amount || 0;
+    const cash = a.shared_cash?.amount || a.shared_cash?.cash_amount || 0;
     const cashPct = Math.round((cash / maxCash) * 100);
     const barColor = cashPct > 50 ? 'var(--clr-green)' : cashPct > 20 ? 'var(--clr-yellow)' : 'var(--clr-red)';
 

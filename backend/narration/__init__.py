@@ -25,8 +25,13 @@ from __future__ import annotations
 import os
 import json
 import re
+from pathlib import Path
 from typing import Optional
 from datetime import datetime
+
+from dotenv import load_dotenv
+
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[2] / ".env")
 
 from backend.models.alert_models import (
     SystemAlert, AnomalyAlert, LiquidityProjection,

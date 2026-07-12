@@ -12,7 +12,7 @@ import time
 
 from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 import json
 from pathlib import Path
 from datetime import datetime
@@ -62,8 +62,9 @@ _case_manager: CaseManager = CaseManager()
 _latency_metrics: LatencyMetrics = LatencyMetrics()
 _validation_report: Optional[dict] = None
 
-DATA_CACHE = Path("backend/data/generated_data.json")
-GT_CACHE   = Path("backend/data/ground_truth.json")
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DATA_CACHE = PROJECT_ROOT / "backend" / "data" / "generated_data.json"
+GT_CACHE = PROJECT_ROOT / "backend" / "data" / "ground_truth.json"
 
 
 
@@ -139,6 +140,12 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Routes — Segment 1: Data & Provider Isolation
 # ---------------------------------------------------------------------------
+
+@app.get("/")
+def root():
+    frontend_path = Path(__file__).resolve().parent.parent / "frontend" / "index.html"
+    return FileResponse(frontend_path)
+
 
 @app.get("/health")
 def health():
